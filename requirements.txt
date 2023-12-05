@@ -1,0 +1,8 @@
+fastapi
+selenium
+openai
+html2text
+beautifulsoup4
+uvicorn
+langdetect
+pyvirtualdisplay
