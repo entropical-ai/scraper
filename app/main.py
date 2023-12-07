@@ -16,16 +16,15 @@ chrome_options.add_argument('--window-size=1920,1080')
 chrome_options.add_argument('--disable-gpu')
 chrome_options.add_argument('--disable-dev-shm-usage')
 
-# HTML2TEXT
-h = html2text.HTML2Text()
-h.ignore_links = True
-h.ignore_images = True
-
 @app.get("/scrape_urls")
 def scrape_urls(urls: Annotated[list[str], Query()], ignore_links = 1, ignore_images = 1):
     ignore_links = False if int(ignore_links) == 0 else True
     ignore_images = False if int(ignore_images) == 0 else True
 
+    # HTML2TEXT
+    h = html2text.HTML2Text()
+    h.ignore_links = ignore_links
+    h.ignore_images = ignore_images
     
     display = Display(visible=0, size=(1920, 1080))
     display.start()
