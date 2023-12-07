@@ -3,7 +3,7 @@ from typing import Annotated
 from selenium import webdriver
 import html2text
 from pyvirtualdisplay import Display
-from typing import Annotated
+from typing import Annotated, Optional
 
 app = FastAPI()
 
@@ -20,7 +20,11 @@ h.ignore_links = True
 h.ignore_images = True
 
 @app.get("/scrape_urls")
-def scrape_urls(urls: Annotated[list[str], Query()], ignore_links = True, ignore_images = True):
+def scrape_urls(urls: Annotated[list[str], Query()], ignore_links = 1, ignore_images = 1):
+    ignore_links = False if int(ignore_links) == 0 else True
+    ignore_images = False if int(ignore_images) == 0 else True
+
+    
     display = Display(visible=0, size=(1920, 1080))
     display.start()
 
