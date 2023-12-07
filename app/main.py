@@ -4,8 +4,10 @@ from selenium import webdriver
 import html2text
 from pyvirtualdisplay import Display
 from typing import Annotated, Optional
+from openai import OpenAI
 
 app = FastAPI()
+openai_client = OpenAI()
 
 chrome_options = webdriver.ChromeOptions()
 chrome_options.add_argument('--no-sandbox')
@@ -41,3 +43,27 @@ def scrape_urls(urls: Annotated[list[str], Query()], ignore_links = 1, ignore_im
     display.stop()
 
     return result
+
+@app.get("/extract_article")
+def extract_article(body: str):
+    prompt = f"""I have the contents of a webpage (converted with html2text package to Markdown). This webpage contains a blog post. You need to isolate the blog post and return as a fully marked-up article, with ATX style headings.
+Note that the markup in the original article below may be illogical. Apply ATX style heading markup where you this it makes sense, if the article doesn't provide any.
+
+Exclude metadata such as date, author, related articles, et cetera. Start with the title, end with the last paragraph of the blog post.
+
+Start with the article title as H1-level heading: # Title
+
+Web page contents:
+
+{body}"""
+
+    response = openai_client.chat.completions.create(
+        model='gpt-4-1106-preview',
+        messages=[
+            {'role': 'system', 'content': 'You are a helpful assistant.'},
+            {'role': 'user', 'content': prompt}
+        ]
+    )
+
+    return response.choices[0].message.content
+
