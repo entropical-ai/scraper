@@ -43,7 +43,7 @@ def scrape_urls(urls: Annotated[list[str], Query()], ignore_links = 1, ignore_im
 
     return result
 
-@app.get("/extract_article")
+@app.post("/extract_article")
 def extract_article(body: str):
     prompt = f"""I have the contents of a webpage (converted with html2text package to Markdown). This webpage contains a blog post. You need to isolate the blog post and return as a fully marked-up article, with ATX style headings.
 Note that the markup in the original article below may be illogical. Apply ATX style heading markup where you this it makes sense, if the article doesn't provide any.
