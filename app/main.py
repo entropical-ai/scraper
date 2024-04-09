@@ -5,6 +5,11 @@ from pyvirtualdisplay import Display
 from typing import Annotated, Optional
 from openai import OpenAI
 from pydantic import BaseModel
+from bs4 import BeautifulSoup
+from selenium.common.exceptions import WebDriverException, TimeoutException
+import re
+import time
+from urllib.parse import urlparse, urljoin
 
 app = FastAPI()
 openai_client = OpenAI()
@@ -16,11 +21,51 @@ chrome_options.add_argument('--headless=new')
 chrome_options.add_argument('--disable-gpu')
 chrome_options.add_argument('--disable-dev-shm-usage')
 
+def scrape_url_recursive(driver, starttime, timeout, url, domain, internal_links_content, outgoing_links, visited_links, current_depth=0, max_depth=3):
+  
+    if current_depth > max_depth:
+        return
+
+    driver.get(url)
+    html_content = driver.page_source
+    soup = BeautifulSoup(html_content, 'html.parser')
+
+    if url not in visited_links:  # Ensure we haven't visited this URL yet
+        print(f"Visiting {url}")
+        visited_links.add(url)
+
+        # Store the content of the internal URL
+        internal_links_content[url] = html_content
+
+        all_a = soup.find_all('a', href=True)
+
+        links = []
+
+        for a in all_a:
+            link = a.attrs['href']
+            joined_link = urljoin(url, link)
+
+            parsed_url = urlparse(joined_link)
+            if parsed_url.netloc == domain:
+                internal_links_content[joined_link] = None
+                links.append(joined_link)
+            elif joined_link not in visited_links:
+                outgoing_links.add(joined_link)
+
+
+        for href in links:
+            if timeout == -1 or time.time() < starttime + timeout:
+                try:
+                    scrape_url_recursive(driver, starttime, timeout, href, domain, internal_links_content, outgoing_links, visited_links, current_depth+1, max_depth)
+                except (WebDriverException, TimeoutException) as e:
+                    print(f"Fetching {href} resulted in Exception: {str(e)}")
+                    
+
 class Body(BaseModel):
     body: str
 
 @app.get("/scrape_urls")
-def scrape_urls(urls: Annotated[list[str], Query()], ignore_links = 1, ignore_images = 1):
+def scrape_urls(urls: Annotated[list[str], Query()], ignore_links = 1, ignore_images = 1, timeout = 10):
     ignore_links = False if int(ignore_links) == 0 else True
     ignore_images = False if int(ignore_images) == 0 else True
 
@@ -33,6 +78,7 @@ def scrape_urls(urls: Annotated[list[str], Query()], ignore_links = 1, ignore_im
     display.start()
 
     driver = webdriver.Chrome(options=chrome_options)
+    driver.set_page_load_timeout(timeout)
 
     result = {}
     for url in urls:
@@ -45,6 +91,53 @@ def scrape_urls(urls: Annotated[list[str], Query()], ignore_links = 1, ignore_im
     display.stop()
 
     return result
+
+@app.get("/crawl")
+def crawl(url: str, timeout: int = 60, max_depth: int = 3):
+    # HTML2TEXT
+    h = html2text.HTML2Text()
+    h.ignore_links = 1
+    h.ignore_images = 1
+    
+    display = Display(visible=0, size=(1920, 1080))
+    display.start()
+
+    driver = webdriver.Chrome(options=chrome_options)
+    driver.set_page_load_timeout(10)
+
+    # Scrape the website
+    parsed_start_url = urlparse(url)
+    start_domain = parsed_start_url.netloc
+
+    internal_links_content = {}
+    outgoing_links = set()
+    visited_links = set()
+
+    scrape_url_recursive(driver, time.time(), timeout, url, start_domain, internal_links_content, outgoing_links, visited_links, max_depth=max_depth)
+
+    # Restart driver
+    driver.close()
+    driver = webdriver.Chrome(options=chrome_options)
+    driver.set_page_load_timeout(5)
+
+    # Get remaining empty contents + convert to markdown
+    for url, content in internal_links_content.items():
+        try:
+            if content is None:
+                print(f"Separately fetching: {url}")
+                driver.get(url)
+                internal_links_content[url] = driver.page_source
+        except (WebDriverException, TimeoutException) as e:
+            print("Exception when fetching", url)
+
+
+    # Stop driver
+    driver.close()
+    display.stop()
+
+    return internal_links_content
+
+
 
 @app.post("/extract_article")
 def extract_article(body: Body):
