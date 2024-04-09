@@ -65,7 +65,7 @@ class Body(BaseModel):
     body: str
 
 @app.get("/scrape_urls")
-def scrape_urls(urls: Annotated[list[str], Query()], ignore_links = 1, ignore_images = 1, timeout = 10):
+def scrape_urls(urls: Annotated[list[str], Query()], ignore_links = 1, ignore_images = 1, timeout = 30):
     ignore_links = False if int(ignore_links) == 0 else True
     ignore_images = False if int(ignore_images) == 0 else True
 
@@ -82,9 +82,13 @@ def scrape_urls(urls: Annotated[list[str], Query()], ignore_links = 1, ignore_im
 
     result = {}
     for url in urls:
-        print("Fetching:", url)
-        driver.get(url)
-        result[url] = h.handle(driver.page_source)
+        try:
+            print("Fetching:", url)
+            driver.get(url)
+            result[url] = h.handle(driver.page_source)
+        except TimeoutException:
+            result[url] = "The contents of this page could not be extracted because it took more than {timeout} seconds to load."
+
 
     # Kill driver
     driver.close()
